@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiz Host Display</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07080f;
+    --surface: #0e1019;
+    --surface2: #161824;
+    --accent: #7c6af7;
+    --accent2: #f7c26a;
+    --gold: #f7c26a;
+    --green: #3de89e;
+    --red: #f76a6a;
+    --text: #f0f0fa;
+    --muted: rgba(240,240,250,0.45);
+    --border: rgba(255,255,255,0.07);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); overflow: hidden; }
+
+  /* ── SCREENS ── */
+  .screen { display: none; position: absolute; inset: 0; }
+  .screen.active { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+  /* ── LOBBY ── */
+  #lobby {
+    background: radial-gradient(ellipse at 60% 40%, rgba(124,106,247,0.18) 0%, transparent 70%),
+                radial-gradient(ellipse at 20% 80%, rgba(247,194,106,0.1) 0%, transparent 60%),
+                var(--bg);
+  }
+  .lobby-inner { display: flex; gap: 80px; align-items: center; }
+  .lobby-left h1 { font-family: 'Syne', sans-serif; font-size: 52px; font-weight: 800; line-height: 1.1; max-width: 460px; }
+  .lobby-left h1 span { color: var(--accent); }
+  .lobby-left p { font-size: 18px; color: var(--muted); margin-top: 16px; }
+  .url-pill { display: inline-block; margin-top: 20px; background: var(--surface2); border: 1px solid var(--border); border-radius: 40px; padding: 10px 22px; font-size: 16px; color: var(--accent); font-family: 'Syne', sans-serif; letter-spacing: 1px; }
+  .qr-wrap { background: white; border-radius: 20px; padding: 18px; box-shadow: 0 0 60px rgba(124,106,247,0.3); }
+  .qr-label { text-align: center; margin-top: 14px; font-size: 13px; color: var(--muted); }
+
+  /* participants strip */
+  .participants-strip { position: absolute; bottom: 36px; left: 0; right: 0; text-align: center; }
+  .participants-strip p { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; padding: 0 40px; }
+  .badge { background: var(--surface2); border: 0.5px solid var(--border); border-radius: 30px; padding: 6px 16px; font-size: 13px; color: var(--text); animation: popIn 0.35s ease; }
+  @keyframes popIn { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .start-btn { margin-top: 32px; background: var(--accent); color: white; border: none; border-radius: 14px; padding: 16px 48px; font-size: 18px; font-family: 'Syne', sans-serif; font-weight: 700; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; box-shadow: 0 0 40px rgba(124,106,247,0.5); }
+  .start-btn:hover { transform: scale(1.04); box-shadow: 0 0 60px rgba(124,106,247,0.7); }
+
+  /* ── QUESTION ── */
+  #question-screen {
+    background: radial-gradient(ellipse at 80% 20%, rgba(124,106,247,0.12) 0%, transparent 60%), var(--bg);
+    padding: 48px 64px;
+  }
+  .q-top { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 36px; }
+  .q-badge { background: var(--surface2); border: 0.5px solid var(--border); border-radius: 8px; padding: 8px 20px; font-size: 14px; color: var(--muted); font-family: 'Syne', sans-serif; }
+  .q-text { font-family: 'Syne', sans-serif; font-size: clamp(26px, 3.5vw, 46px); font-weight: 700; text-align: center; max-width: 900px; line-height: 1.3; margin-bottom: 48px; }
+  .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; max-width: 960px; }
+  .opt-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 16px; padding: 22px 28px; font-size: 20px; display: flex; align-items: center; gap: 16px; transition: all 0.3s; }
+  .opt-card.reveal-correct { background: rgba(61,232,158,0.12); border-color: var(--green); }
+  .opt-card.reveal-wrong { background: rgba(247,106,106,0.1); border-color: var(--red); opacity: 0.55; }
+  .opt-letter { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; background: var(--surface); border-radius: 8px; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--muted); }
+  .opt-card.reveal-correct .opt-letter { background: var(--green); color: #07080f; }
+  .first-answer-toast { position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%); background: rgba(61,232,158,0.15); border: 1px solid var(--green); border-radius: 12px; padding: 14px 32px; font-size: 18px; color: var(--green); display: none; white-space: nowrap; animation: slideUp 0.4s ease; }
+  @keyframes slideUp { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+
+  /* timer */
+  .timer-wrap { position: relative; width: 80px; height: 80px; }
+  .timer-wrap svg { position: absolute; top: 0; left: 0; transform: rotate(-90deg); }
+  .timer-center { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; }
+
+  /* answer count bar */
+  .answer-bar { position: absolute; bottom: 24px; left: 64px; right: 64px; display: flex; align-items: center; gap: 16px; }
+  .answer-bar-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 10px; overflow: hidden; }
+  .answer-bar-fill { height: 100%; background: var(--accent); border-radius: 10px; transition: width 0.4s; }
+  .answer-count { font-size: 14px; color: var(--muted); white-space: nowrap; }
+
+  /* ── LEADERBOARD ── */
+  #leaderboard-screen { padding: 48px 80px; background: var(--bg); }
+  .lb-header { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 36px; }
+  .lb-list { width: 100%; max-width: 860px; display: flex; flex-direction: column; gap: 12px; }
+  .lb-row { display: flex; align-items: center; gap: 20px; background: var(--surface); border: 0.5px solid var(--border); border-radius: 16px; padding: 18px 24px; animation: rowIn 0.4s ease both; }
+  .lb-row:nth-child(1) { animation-delay: 0.05s; border-color: rgba(247,194,106,0.35); }
+  .lb-row:nth-child(2) { animation-delay: 0.1s; border-color: rgba(180,180,200,0.3); }
+  .lb-row:nth-child(3) { animation-delay: 0.15s; border-color: rgba(180,130,80,0.3); }
+  @keyframes rowIn { from { transform: translateX(-30px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .lb-rank { font-family: 'Syne', sans-serif; font-size: 22px; width: 36px; text-align: center; }
+  .lb-avatar { width: 46px; height: 46px; border-radius: 50%; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 16px; color: var(--accent); border: 1px solid var(--border); flex-shrink: 0; }
+  .lb-info { flex: 1; }
+  .lb-name { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 600; }
+  .lb-meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .lb-right { text-align: right; }
+  .lb-pts { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 800; color: var(--gold); }
+  .lb-detail { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .lb-progress { position: absolute; bottom: 36px; left: 80px; display: flex; gap: 8px; }
+  .q-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); }
+  .q-dot.done { background: var(--accent); border-color: var(--accent); }
+  .q-dot.current { background: var(--gold); border-color: var(--gold); }
+  .next-q-btn { position: absolute; bottom: 24px; right: 80px; background: var(--accent); color: white; border: none; border-radius: 12px; padding: 14px 36px; font-size: 16px; font-family: 'Syne', sans-serif; font-weight: 700; cursor: pointer; transition: transform 0.15s; }
+  .next-q-btn:hover { transform: scale(1.04); }
+
+  /* ── WINNER ── */
+  #winner-screen {
+    background: radial-gradient(ellipse at 50% 40%, rgba(247,194,106,0.2) 0%, transparent 65%),
+                radial-gradient(ellipse at 20% 80%, rgba(124,106,247,0.15) 0%, transparent 50%), var(--bg);
+  }
+  .confetti-anim { font-size: 42px; letter-spacing: 12px; animation: bounce 1.5s infinite; margin-bottom: 12px; }
+  @keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  .winner-label { font-size: 13px; color: var(--muted); font-family: 'Syne', sans-serif; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 8px; }
+  .winner-name-big { font-family: 'Syne', sans-serif; font-size: clamp(40px, 6vw, 80px); font-weight: 800; color: var(--gold); line-height: 1; text-shadow: 0 0 60px rgba(247,194,106,0.5); }
+  .winner-email { font-size: 18px; color: var(--muted); margin-top: 10px; margin-bottom: 40px; }
+  .winner-stats { display: flex; gap: 48px; }
+  .wstat { text-align: center; background: var(--surface); border: 0.5px solid var(--border); border-radius: 16px; padding: 24px 40px; }
+  .wstat-val { font-family: 'Syne', sans-serif; font-size: 38px; font-weight: 800; color: var(--text); }
+  .wstat-lbl { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .podium-strip { position: absolute; bottom: 0; left: 0; right: 0; display: flex; justify-content: center; align-items: flex-end; gap: 8px; height: 120px; }
+  .pod { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 16px; width: 160px; border-radius: 12px 12px 0 0; }
+  .pod:nth-child(1) { height: 80px; background: linear-gradient(to top, rgba(180,180,200,0.15), transparent); }
+  .pod:nth-child(2) { height: 110px; background: linear-gradient(to top, rgba(247,194,106,0.2), transparent); }
+  .pod:nth-child(3) { height: 65px; background: linear-gradient(to top, rgba(180,130,80,0.15), transparent); }
+  .pod-name { font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 600; }
+  .pod-pts { font-size: 11px; color: var(--muted); }
+
+  /* ── SETUP OVERLAY ── */
+  #setup-overlay { position: fixed; inset: 0; background: rgba(7,8,15,0.97); z-index: 999; display: flex; align-items: center; justify-content: center; }
+  .setup-card { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 48px; width: 560px; }
+  .setup-card h2 { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; margin-bottom: 6px; }
+  .setup-card p { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+  .setup-field { margin-bottom: 18px; }
+  .setup-field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; font-family: 'Syne', sans-serif; letter-spacing: 0.5px; }
+  .setup-field input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; font-size: 15px; color: var(--text); font-family: 'DM Sans', sans-serif; outline: none; transition: border-color 0.2s; }
+  .setup-field input:focus { border-color: var(--accent); }
+  .setup-btn { width: 100%; background: var(--accent); color: white; border: none; border-radius: 12px; padding: 15px; font-size: 17px; font-family: 'Syne', sans-serif; font-weight: 700; cursor: pointer; margin-top: 8px; }
+  .demo-btn { width: 100%; background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 12px; padding: 12px; font-size: 14px; font-family: 'DM Sans', sans-serif; cursor: pointer; margin-top: 10px; }
+  .demo-btn:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+</style>
+</head>
+<body>
+
+<!-- SETUP OVERLAY -->
+<div id="setup-overlay">
+  <div class="setup-card">
+    <h2>🎯 Quiz Host Setup</h2>
+    <p>Enter your Firebase config to connect real-time data, or run in demo mode.</p>
+    <div class="setup-field">
+      <label>FIREBASE API KEY</label>
+      <input id="fb-apikey" placeholder="AIzaSyCUE5wZfbJ4S0dVWdQunELMcldBUwBR544" />
+    </div>
+    <div class="setup-field">
+      <label>FIREBASE PROJECT ID</label>
+      <input id="fb-project" placeholder="quiz-90492" />
+    </div>
+    <div class="setup-field">
+      <label>QUIZ JOIN URL (shown in QR code)</label>
+      <input id="quiz-url" placeholder="https://jyothymukeshkumar.github.io/Quiz-attendee-phone/" value="https://jyothymukeshkumar.github.io/Quiz-attendee-phone/" />
+    </div>
+    <div class="setup-field">
+      <label>QUIZ ROOM CODE</label>
+      <input id="room-code" placeholder="ROOM123" value="ROOM001" />
+    </div>
+    <button class="setup-btn" onclick="connectFirebase()">Connect & Start</button>
+    <button class="demo-btn" onclick="startDemo()">▶ Run in Demo Mode (no Firebase needed)</button>
+  </div>
+</div>
+
+<!-- LOBBY -->
+<div id="lobby" class="screen active">
+  <div class="lobby-inner">
+    <div class="lobby-left">
+      <h1>Join the <span>Live Quiz!</span></h1>
+      <p>Scan the QR code with your phone camera</p>
+      <div class="url-pill" id="display-url">quiz.yourevent.com/join</div>
+      <br>
+      <div class="url-pill" style="color:var(--gold)">Room: <span id="display-room">ROOM001</span></div>
+      <br><br>
+      <button class="start-btn" onclick="startQuiz()">▶ Start Quiz</button>
+    </div>
+    <div>
+      <div class="qr-wrap">
+        <canvas id="qr-canvas" width="200" height="200"></canvas>
+      </div>
+      <div class="qr-label">Point camera here to join</div>
+    </div>
+  </div>
+  <div class="participants-strip">
+    <p id="join-count">Waiting for participants...</p>
+    <div class="badges" id="badges"></div>
+  </div>
+</div>
+
+<!-- QUESTION SCREEN -->
+<div id="question-screen" class="screen">
+  <div class="q-top">
+    <div class="q-badge" id="q-badge">Question 1 / 5</div>
+    <div class="timer-wrap">
+      <svg width="80" height="80" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="7"/>
+        <circle id="timer-arc" cx="40" cy="40" r="34" fill="none" stroke="#7c6af7" stroke-width="7"
+          stroke-dasharray="213.6" stroke-dashoffset="0" stroke-linecap="round"/>
+      </svg>
+      <div class="timer-center" id="timer-val">20</div>
+    </div>
+    <div class="q-badge" id="answer-counter">0 answered</div>
+  </div>
+  <div class="q-text" id="q-text"></div>
+  <div class="options-grid" id="options-grid"></div>
+  <div class="first-answer-toast" id="first-toast"></div>
+  <div class="answer-bar">
+    <span class="answer-count" id="ans-label">0 / 0 answered</span>
+    <div class="answer-bar-track"><div class="answer-bar-fill" id="ans-fill" style="width:0%"></div></div>
+  </div>
+</div>
+
+<!-- LEADERBOARD -->
+<div id="leaderboard-screen" class="screen">
+  <div class="lb-header" id="lb-header">Leaderboard — After Q1</div>
+  <div class="lb-list" id="lb-list"></div>
+  <div class="lb-progress" id="lb-progress"></div>
+  <button class="next-q-btn" id="next-q-btn" onclick="nextAction()">Next Question →</button>
+</div>
+
+<!-- WINNER -->
+<div id="winner-screen" class="screen">
+  <div class="confetti-anim">🎉🏆🎉</div>
+  <div class="winner-label">And the winner is</div>
+  <div class="winner-name-big" id="w-name">—</div>
+  <div class="winner-email" id="w-email">—</div>
+  <div class="winner-stats">
+    <div class="wstat"><div class="wstat-val" id="w-correct">—</div><div class="wstat-lbl">Correct Answers</div></div>
+    <div class="wstat"><div class="wstat-val" id="w-avg">—</div><div class="wstat-lbl">Avg Speed</div></div>
+    <div class="wstat"><div class="wstat-val" id="w-pts">—</div><div class="wstat-lbl">Total Points</div></div>
+  </div>
+  <div class="podium-strip" id="podium"></div>
+</div>
+
+<script>
+// ─── QR CODE GENERATOR (real scannable QR) ────────────────────────────────
+function drawFakeQR(canvas, url) {
+  canvas.style.display = 'none';
+  const existing = document.getElementById('real-qr');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'real-qr';
+  canvas.parentNode.insertBefore(div, canvas);
+  new QRCode(div, { text: url, width: 200, height: 200 });
+}
+
+// ─── APP STATE ────────────────────────────────────────────────────────────
+const QUESTIONS = [
+  { text: "Which is the largest ocean on Earth?", options: ["Atlantic","Indian","Pacific","Arctic"], correct: 2, time: 20 },
+  { text: "What does 'HTTP' stand for?", options: ["HyperText Transfer Protocol","HighText Transfer Process","HyperTool Tech Platform","HyperText Tech Protocol"], correct: 0, time: 20 },
+  { text: "How many planets are in our Solar System?", options: ["7","8","9","10"], correct: 1, time: 15 },
+  { text: "What year did World War II end?", options: ["1943","1944","1945","1946"], correct: 2, time: 20 },
+  { text: "Which element has the chemical symbol 'Au'?", options: ["Silver","Copper","Gold","Aluminum"], correct: 2, time: 15 },
+];
+
+let db = null;
+let roomCode = 'ROOM001';
+let currentQ = 0;
+let timerInterval = null;
+let timeLeft = 20;
+let totalTime = 20;
+let participants = {};
+let answers = {};
+let isDemo = false;
+let demoInterval = null;
+
+// ─── FIREBASE CONNECT ─────────────────────────────────────────────────────
+function connectFirebase() {
+  const apiKey = document.getElementById('fb-apikey').value.trim();
+  const projectId = document.getElementById('fb-project').value.trim();
+  const url = document.getElementById('quiz-url').value.trim();
+  roomCode = document.getElementById('room-code').value.trim() || 'ROOM001';
+  if (!apiKey || !projectId) { alert('Please enter Firebase API key and project ID'); return; }
+  try {
+    const app = firebase.initializeApp({ apiKey, databaseURL: `https://${projectId}-default-rtdb.firebaseio.com`, projectId });
+    db = firebase.database();
+    document.getElementById('setup-overlay').style.display = 'none';
+    document.getElementById('display-url').textContent = url;
+    document.getElementById('display-room').textContent = roomCode;
+    drawFakeQR(document.getElementById('qr-canvas'), url + '?room=' + roomCode);
+    listenForParticipants();
+    listenForAnswers();
+    initRoom();
+  } catch(e) { alert('Firebase error: ' + e.message); }
+}
+
+function startDemo() {
+  isDemo = true;
+  document.getElementById('setup-overlay').style.display = 'none';
+  roomCode = document.getElementById('room-code').value || 'DEMO01';
+  document.getElementById('display-room').textContent = roomCode;
+  drawFakeQR(document.getElementById('qr-canvas'), 'https://quiz.demo.com/join?room=' + roomCode);
+  // Fake participants
+  const names = ['Arjun Mehta','Priya Sharma','Karan Singh','Sneha Patel','Dev Raj','Nisha Joshi','Rahul Kumar'];
+  names.forEach((n,i) => setTimeout(() => addParticipantBadge(n, n.toLowerCase().replace(' ','.')+'@demo.com'), i*400));
+}
+
+function initRoom() {
+  if (!db) return;
+  db.ref(`rooms/${roomCode}`).set({ status: 'lobby', currentQuestion: -1, startedAt: Date.now() });
+}
+
+// ─── PARTICIPANTS ─────────────────────────────────────────────────────────
+function listenForParticipants() {
+  if (!db) return;
+  db.ref(`rooms/${roomCode}/participants`).on('child_added', snap => {
+    const p = snap.val();
+    participants[snap.key] = p;
+    addParticipantBadge(p.name, p.email);
+  });
+}
+
+function addParticipantBadge(name, email) {
+  participants[name] = { name, email };
+  const el = document.createElement('div');
+  el.className = 'badge';
+  el.textContent = name;
+  document.getElementById('badges').appendChild(el);
+  const count = Object.keys(participants).length;
+  document.getElementById('join-count').textContent = `${count} participant${count > 1 ? 's' : ''} joined`;
+}
+
+// ─── ANSWERS LISTENER ─────────────────────────────────────────────────────
+function listenForAnswers() {
+  if (!db) return;
+  db.ref(`rooms/${roomCode}/answers`).on('value', snap => {
+    const data = snap.val() || {};
+    answers = data;
+    updateAnswerUI();
+  });
+}
+
+function updateAnswerUI() {
+  const qAnswers = answers[`q${currentQ}`] || {};
+  const count = Object.keys(qAnswers).length;
+  const total = Object.keys(participants).length;
+  document.getElementById('answer-counter').textContent = `${count} answered`;
+  document.getElementById('ans-label').textContent = `${count} / ${total} answered`;
+  const pct = total > 0 ? (count / total * 100) : 0;
+  document.getElementById('ans-fill').style.width = pct + '%';
+  // Check first correct
+  const correct = QUESTIONS[currentQ].correct;
+  let firstCorrect = null;
+  Object.entries(qAnswers).forEach(([uid, ans]) => {
+    if (ans.choice === correct) {
+      if (!firstCorrect || ans.ms < firstCorrect.ms) firstCorrect = { name: ans.name, ms: ans.ms };
+    }
+  });
+  if (firstCorrect) showFirstCorrect(firstCorrect.name, firstCorrect.ms);
+}
+
+let toastShown = false;
+function showFirstCorrect(name, ms) {
+  if (toastShown) return;
+  toastShown = true;
+  const toast = document.getElementById('first-toast');
+  toast.textContent = `⚡ First correct: ${name} — ${(ms/1000).toFixed(1)}s`;
+  toast.style.display = 'block';
+}
+
+// ─── QUIZ FLOW ─────────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function startQuiz() {
+  currentQ = 0;
+  if (db) {
+    // Push all questions to Firebase so attendee phones can read them
+    db.ref(`rooms/${roomCode}/questions`).set(QUESTIONS);
+    db.ref(`rooms/${roomCode}/status`).set('playing');
+    db.ref(`rooms/${roomCode}/currentQuestion`).set(0);
+  }
+  showQuestion();
+}
+
+function showQuestion() {
+  showScreen('question-screen');
+  toastShown = false;
+  document.getElementById('first-toast').style.display = 'none';
+  const q = QUESTIONS[currentQ];
+  totalTime = q.time;
+  timeLeft = totalTime;
+  document.getElementById('q-badge').textContent = `Question ${currentQ+1} / ${QUESTIONS.length}`;
+  document.getElementById('q-text').textContent = q.text;
+  document.getElementById('answer-counter').textContent = '0 answered';
+  document.getElementById('ans-fill').style.width = '0%';
+  document.getElementById('ans-label').textContent = `0 / ${Object.keys(participants).length} answered`;
+  // Render options
+  const grid = document.getElementById('options-grid');
+  grid.innerHTML = '';
+  q.options.forEach((opt, i) => {
+    const card = document.createElement('div');
+    card.className = 'opt-card';
+    card.id = `opt-${i}`;
+    card.innerHTML = `<div class="opt-letter">${['A','B','C','D'][i]}</div><span>${opt}</span>`;
+    grid.appendChild(card);
+  });
+  // Push to Firebase
+  if (db) db.ref(`rooms/${roomCode}/currentQuestion`).set(currentQ);
+  // Demo: simulate answers
+  if (isDemo) simulateDemoAnswers();
+  startTimer();
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  updateTimerUI();
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    updateTimerUI();
+    if (timeLeft <= 0) { clearInterval(timerInterval); revealAnswers(); }
+  }, 1000);
+}
+
+function updateTimerUI() {
+  document.getElementById('timer-val').textContent = timeLeft;
+  const pct = timeLeft / totalTime;
+  const circ = 213.6;
+  document.getElementById('timer-arc').style.strokeDashoffset = circ * (1 - pct);
+  const color = pct > 0.5 ? '#7c6af7' : pct > 0.25 ? '#f7c26a' : '#f76a6a';
+  document.getElementById('timer-arc').style.stroke = color;
+  document.getElementById('timer-val').style.color = color;
+}
+
+function revealAnswers() {
+  clearInterval(timerInterval);
+  clearInterval(demoInterval);
+  const correct = QUESTIONS[currentQ].correct;
+  QUESTIONS[currentQ].options.forEach((_, i) => {
+    const card = document.getElementById(`opt-${i}`);
+    if (!card) return;
+    if (i === correct) card.classList.add('reveal-correct');
+    else card.classList.add('reveal-wrong');
+  });
+  if (db) db.ref(`rooms/${roomCode}/revealAnswer`).set({ q: currentQ, correct, ts: Date.now() });
+  setTimeout(() => showLeaderboard(), 3000);
+}
+
+// ─── LEADERBOARD ──────────────────────────────────────────────────────────
+function computeScores() {
+  const scores = {};
+  Object.entries(participants).forEach(([key, p]) => {
+    scores[key] = { name: p.name || key, email: p.email || '', pts: 0, correct: 0, totalMs: 0 };
+  });
+  for (let qi = 0; qi <= currentQ; qi++) {
+    const qAnswers = (answers[`q${qi}`]) || {};
+    const correctOpt = QUESTIONS[qi].correct;
+    Object.entries(qAnswers).forEach(([uid, ans]) => {
+      if (!scores[uid]) scores[uid] = { name: ans.name, email: ans.email || '', pts: 0, correct: 0, totalMs: 0 };
+      if (ans.choice === correctOpt) {
+        const pts = Math.max(100, 1000 - Math.floor(ans.ms / 30));
+        scores[uid].pts += pts;
+        scores[uid].correct++;
+        scores[uid].totalMs += ans.ms;
+      }
+    });
+  }
+  return Object.values(scores).sort((a,b) => b.pts - a.pts || a.totalMs - b.totalMs);
+}
+
+function showLeaderboard() {
+  showScreen('leaderboard-screen');
+  document.getElementById('lb-header').textContent = `LEADERBOARD — AFTER Q${currentQ+1}`;
+  const sorted = computeScores();
+  const list = document.getElementById('lb-list');
+  list.innerHTML = '';
+  const medals = ['🥇','🥈','🥉'];
+  sorted.slice(0, 7).forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'lb-row';
+    const initials = s.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const avgSpeed = s.correct > 0 ? (s.totalMs / s.correct / 1000).toFixed(1) + 's' : '—';
+    row.innerHTML = `
+      <span class="lb-rank">${medals[i] || (i+1)}</span>
+      <div class="lb-avatar">${initials}</div>
+      <div class="lb-info">
+        <div class="lb-name">${s.name}</div>
+        <div class="lb-meta">${s.email} · ${s.correct}/${currentQ+1} correct · avg ${avgSpeed}</div>
+      </div>
+      <div class="lb-right">
+        <div class="lb-pts">${s.pts.toLocaleString()}</div>
+        <div class="lb-detail">points</div>
+      </div>`;
+    list.appendChild(row);
+  });
+  // Progress dots
+  const prog = document.getElementById('lb-progress');
+  prog.innerHTML = '';
+  QUESTIONS.forEach((_,i) => {
+    const dot = document.createElement('div');
+    dot.className = 'q-dot' + (i < currentQ ? ' done' : i === currentQ ? ' current' : '');
+    prog.appendChild(dot);
+  });
+  const btn = document.getElementById('next-q-btn');
+  if (currentQ + 1 >= QUESTIONS.length) {
+    btn.textContent = '🏆 Announce Winner';
+  } else {
+    btn.textContent = `Question ${currentQ+2} →`;
+  }
+}
+
+function nextAction() {
+  if (currentQ + 1 >= QUESTIONS.length) {
+    announceWinner();
+  } else {
+    currentQ++;
+    showQuestion();
+  }
+}
+
+// ─── WINNER ───────────────────────────────────────────────────────────────
+function announceWinner() {
+  showScreen('winner-screen');
+  const sorted = computeScores();
+  const w = sorted[0];
+  document.getElementById('w-name').textContent = w.name;
+  document.getElementById('w-email').textContent = w.email;
+  document.getElementById('w-correct').textContent = `${w.correct}/${QUESTIONS.length}`;
+  document.getElementById('w-avg').textContent = w.correct > 0 ? (w.totalMs/w.correct/1000).toFixed(1)+'s' : '—';
+  document.getElementById('w-pts').textContent = w.pts.toLocaleString();
+  if (db) db.ref(`rooms/${roomCode}/winner`).set({ name: w.name, email: w.email, pts: w.pts });
+  // Podium
+  const podium = document.getElementById('podium');
+  podium.innerHTML = '';
+  [sorted[1], sorted[0], sorted[2]].forEach((s,i) => {
+    if (!s) return;
+    const p = document.createElement('div');
+    p.className = 'pod';
+    p.innerHTML = `<div class="pod-name">${s ? s.name.split(' ')[0] : ''}</div><div class="pod-pts">${s ? s.pts.toLocaleString() : ''}</div>`;
+    podium.appendChild(p);
+  });
+}
+
+// ─── DEMO SIMULATION ──────────────────────────────────────────────────────
+function simulateDemoAnswers() {
+  clearInterval(demoInterval);
+  const demoNames = Object.keys(participants);
+  let answered = new Set();
+  demoInterval = setInterval(() => {
+    const remaining = demoNames.filter(n => !answered.has(n));
+    if (remaining.length === 0) { clearInterval(demoInterval); return; }
+    const name = remaining[Math.floor(Math.random() * remaining.length)];
+    answered.add(name);
+    const ms = Math.floor(Math.random() * (totalTime * 800)) + 800;
+    const isCorrect = Math.random() < 0.6;
+    const choice = isCorrect ? QUESTIONS[currentQ].correct : (QUESTIONS[currentQ].correct + 1 + Math.floor(Math.random()*3)) % 4;
+    const uid = name.replace(/\s+/g,'_');
+    if (!answers[`q${currentQ}`]) answers[`q${currentQ}`] = {};
+    answers[`q${currentQ}`][uid] = { name, email: uid+'@demo.com', choice, ms };
+    const count = Object.keys(answers[`q${currentQ}`]).length;
+    const total = demoNames.length;
+    document.getElementById('answer-counter').textContent = `${count} answered`;
+    document.getElementById('ans-label').textContent = `${count} / ${total} answered`;
+    document.getElementById('ans-fill').style.width = (count/total*100) + '%';
+    if (isCorrect && !toastShown) {
+      const allCorrect = Object.entries(answers[`q${currentQ}`]).filter(([,a])=>a.choice===QUESTIONS[currentQ].correct);
+      if (allCorrect.length === 1) showFirstCorrect(name, ms);
+    }
+  }, 900);
+}
+</script>
+</body>
+</html>

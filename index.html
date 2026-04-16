@@ -207,24 +207,39 @@ function joinQuiz() {
 // ─── LISTEN FOR QUIZ STATE ────────────────────────────────────────────────
 function listenForQuiz() {
   if (!db) return;
+
+  // Listen for question index change
   db.ref(`rooms/${roomCode}/currentQuestion`).on('value', snap => {
     const qIdx = snap.val();
-    if (qIdx !== null && qIdx >= 0 && qIdx !== currentQ) {
-      db.ref(`rooms/${roomCode}/questions/${qIdx}`).once('value', qSnap => {
-        const q = qSnap.val();
-        if (q) loadQuestion(qIdx, q.time || 20, q.text, q.options);
-      });
-    }
+    if (qIdx === null || qIdx < 0 || qIdx === currentQ) return;
+
+    // Try fetching from Firebase questions node first
+    db.ref(`rooms/${roomCode}/questions`).once('value', allSnap => {
+      const allQ = allSnap.val();
+      if (allQ && allQ[qIdx]) {
+        const q = allQ[qIdx];
+        loadQuestion(qIdx, q.time || 20, q.text, q.options, q.correct);
+      } else {
+        // Fallback: use built-in DEMO_QUESTIONS array
+        if (qIdx < DEMO_QUESTIONS.length) {
+          const q = DEMO_QUESTIONS[qIdx];
+          loadQuestion(qIdx, q.time || 20, q.text, q.options, q.correct);
+        }
+      }
+    });
   });
-  db.ref(`rooms/${roomCode}/winner`).on('value', snap => {
-    if (snap.val()) showFinalResult();
-  });
+
+  // Listen for answer reveal from host
   db.ref(`rooms/${roomCode}/revealAnswer`).on('value', snap => {
     const data = snap.val();
     if (data && data.q === currentQ) revealAnswer(data.correct);
   });
-}
 
+  // Listen for winner (quiz ended)
+  db.ref(`rooms/${roomCode}/winner`).on('value', snap => {
+    if (snap.val()) showFinalResult();
+  });
+}
 // ─── QUESTION ─────────────────────────────────────────────────────────────
 const DEMO_QUESTIONS = [
   { text: "Which is the largest ocean on Earth?", options: ["Atlantic","Indian","Pacific","Arctic"], correct: 2, time: 20 },
@@ -234,7 +249,7 @@ const DEMO_QUESTIONS = [
   { text: "Which element has the chemical symbol 'Au'?", options: ["Silver","Copper","Gold","Aluminum"], correct: 2, time: 15 },
 ];
 
-function loadQuestion(qIdx, time, text, options) {
+function loadQuestion(qIdx, time, text, options, correctOpt) {
   currentQ = qIdx;
   answered = false;
   questionStartTime = Date.now();
@@ -252,7 +267,7 @@ function loadQuestion(qIdx, time, text, options) {
     btn.className = 'opt-btn';
     btn.id = `opt-${i}`;
     btn.innerHTML = `<div class="opt-ltr">${['A','B','C','D'][i]}</div><span>${opt}</span>`;
-    btn.onclick = () => submitAnswer(i, q.correct);
+    btn.onclick = () => submitAnswer(i, correctOpt ?? q.correct);
     optList.appendChild(btn);
   });
   showPage('question-page');

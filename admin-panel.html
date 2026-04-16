@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiz Admin Panel</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07080f;
+    --surface: #0e1019;
+    --surface2: #161824;
+    --accent: #7c6af7;
+    --gold: #f7c26a;
+    --green: #3de89e;
+    --red: #f76a6a;
+    --text: #f0f0fa;
+    --muted: rgba(240,240,250,0.5);
+    --border: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); min-height: 100vh; }
+
+  /* SETUP */
+  #setup { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .setup-card { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 48px; width: 520px; }
+  .setup-card h1 { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; margin-bottom: 6px; }
+  .setup-card p { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; font-family: 'Syne', sans-serif; letter-spacing: 0.5px; text-transform: uppercase; }
+  input, textarea, select { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 14px; font-size: 15px; color: var(--text); font-family: 'DM Sans', sans-serif; outline: none; margin-bottom: 16px; transition: border-color 0.2s; resize: vertical; }
+  input:focus, textarea:focus { border-color: var(--accent); }
+  .btn-primary { background: var(--accent); color: white; border: none; border-radius: 10px; padding: 12px 28px; font-size: 15px; font-family: 'Syne', sans-serif; font-weight: 700; cursor: pointer; transition: opacity 0.15s; }
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-outline { background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 10px; padding: 10px 24px; font-size: 14px; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s; }
+  .btn-outline:hover { color: var(--text); border-color: rgba(255,255,255,0.2); }
+  .btn-danger { background: rgba(247,106,106,0.15); color: var(--red); border: 1px solid rgba(247,106,106,0.3); border-radius: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+
+  /* MAIN LAYOUT */
+  #main { display: none; }
+  .topbar { background: var(--surface); border-bottom: 0.5px solid var(--border); padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
+  .topbar-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; }
+  .topbar-title span { color: var(--accent); }
+  .room-info { font-size: 13px; color: var(--gold); background: rgba(247,194,106,0.1); border: 0.5px solid rgba(247,194,106,0.3); border-radius: 8px; padding: 6px 14px; }
+  .content { display: grid; grid-template-columns: 1fr 360px; gap: 24px; padding: 32px; min-height: calc(100vh - 65px); }
+
+  /* QUESTIONS PANEL */
+  .panel { background: var(--surface); border: 0.5px solid var(--border); border-radius: 18px; padding: 24px; }
+  .panel-title { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 20px; }
+  .q-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+  .q-item { background: var(--surface2); border: 0.5px solid var(--border); border-radius: 12px; padding: 16px 18px; display: flex; align-items: flex-start; gap: 14px; }
+  .q-item-num { background: var(--accent); color: white; border-radius: 8px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .q-item-body { flex: 1; }
+  .q-item-text { font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+  .q-item-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .q-opt-tag { font-size: 11px; padding: 3px 9px; border-radius: 20px; background: var(--surface); border: 0.5px solid var(--border); color: var(--muted); }
+  .q-opt-tag.correct { background: rgba(61,232,158,0.12); border-color: var(--green); color: var(--green); }
+  .q-item-time { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* ADD QUESTION FORM */
+  .add-form { background: var(--surface2); border: 1px dashed var(--border); border-radius: 14px; padding: 20px; }
+  .add-form h3 { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600; color: var(--muted); margin-bottom: 16px; }
+  .opts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .opt-input-row { display: flex; align-items: center; gap: 8px; }
+  .opt-ltr-label { font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 700; color: var(--muted); width: 20px; }
+  .opt-input-row input { margin-bottom: 0; }
+  .correct-select { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .correct-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; font-size: 13px; color: var(--muted); cursor: pointer; font-family: 'Syne', sans-serif; font-weight: 700; transition: all 0.15s; }
+  .correct-btn.selected { background: rgba(61,232,158,0.15); border-color: var(--green); color: var(--green); }
+  .time-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .time-row label { margin: 0; min-width: 100px; }
+  .time-row input { width: 80px; margin: 0; }
+  .form-actions { display: flex; gap: 10px; }
+
+  /* RIGHT PANEL */
+  .status-section { margin-bottom: 24px; }
+  .status-title { font-family: 'Syne', sans-serif; font-size: 12px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px; }
+  .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-box { background: var(--surface2); border: 0.5px solid var(--border); border-radius: 12px; padding: 14px 16px; text-align: center; }
+  .stat-box-val { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; color: var(--text); }
+  .stat-box-lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .stat-box-val.green { color: var(--green); }
+  .stat-box-val.gold { color: var(--gold); }
+
+  .participants-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .p-row { display: flex; align-items: center; gap: 10px; background: var(--surface2); border: 0.5px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .p-avatar { width: 32px; height: 32px; border-radius: 50%; background: rgba(124,106,247,0.2); border: 1px solid rgba(124,106,247,0.3); display: flex; align-items: center; justify-content: center; font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 700; color: var(--accent); flex-shrink: 0; }
+  .p-info { flex: 1; }
+  .p-name { font-size: 14px; font-weight: 500; }
+  .p-email { font-size: 11px; color: var(--muted); }
+  .p-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+
+  .control-btns { display: flex; flex-direction: column; gap: 10px; }
+  .btn-big { padding: 14px; font-size: 16px; border-radius: 12px; text-align: center; width: 100%; }
+  .btn-winner { background: linear-gradient(135deg, rgba(247,194,106,0.2), rgba(124,106,247,0.2)); border: 1px solid rgba(247,194,106,0.4); color: var(--gold); }
+
+  .export-section { margin-top: 20px; }
+  .export-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .export-table th { text-align: left; padding: 8px 10px; color: var(--muted); font-weight: 500; border-bottom: 0.5px solid var(--border); }
+  .export-table td { padding: 8px 10px; border-bottom: 0.5px solid var(--border); }
+  .export-table tr:last-child td { border: none; }
+
+  .tag-live { background: rgba(61,232,158,0.15); color: var(--green); border: 0.5px solid rgba(61,232,158,0.3); border-radius: 20px; padding: 3px 10px; font-size: 11px; }
+  .tag-waiting { background: rgba(247,194,106,0.12); color: var(--gold); border: 0.5px solid rgba(247,194,106,0.3); border-radius: 20px; padding: 3px 10px; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="setup">
+  <div class="setup-card">
+    <h1>🛠 Quiz Admin Panel</h1>
+    <p>Configure your Firebase connection, then manage questions and control the quiz.</p>
+    <label>Firebase API Key</label>
+    <input id="s-apikey" placeholder="AIzaSyCUE5wZfbJ4S0dVWdQunELMcldBUwBR544" />
+    <label>Firebase Project ID</label>
+    <input id="s-project" placeholder="quiz-90492" />
+    <label>Room Code</label>
+    <input id="s-room" placeholder="ROOM001" value="ROOM001" />
+    <div style="display:flex;gap:10px;">
+      <button class="btn-primary" onclick="connectAdmin()">Connect Firebase</button>
+      <button class="btn-outline" onclick="runDemo()">Demo Mode</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN ADMIN UI -->
+<div id="main">
+  <div class="topbar">
+    <div class="topbar-title">⚡ <span>QuizLive</span> Admin</div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="room-info">Room: <span id="room-label">—</span></div>
+      <span id="status-tag" class="tag-waiting">Lobby</span>
+    </div>
+  </div>
+  <div class="content">
+    <!-- LEFT: Questions -->
+    <div>
+      <div class="panel" style="margin-bottom:20px;">
+        <div class="panel-title">Questions</div>
+        <div class="q-list" id="q-list"></div>
+        <div class="add-form">
+          <h3>+ Add Question</h3>
+          <label>Question Text</label>
+          <textarea id="f-text" rows="2" placeholder="Type your question here..."></textarea>
+          <div class="opts-grid" style="margin-bottom:14px;">
+            <div class="opt-input-row"><span class="opt-ltr-label">A</span><input id="f-a" placeholder="Option A" /></div>
+            <div class="opt-input-row"><span class="opt-ltr-label">B</span><input id="f-b" placeholder="Option B" /></div>
+            <div class="opt-input-row"><span class="opt-ltr-label">C</span><input id="f-c" placeholder="Option C" /></div>
+            <div class="opt-input-row"><span class="opt-ltr-label">D</span><input id="f-d" placeholder="Option D" /></div>
+          </div>
+          <label style="margin-bottom:8px;">Correct Answer</label>
+          <div class="correct-select" id="correct-select">
+            <button class="correct-btn" onclick="selectCorrect(0)">A</button>
+            <button class="correct-btn" onclick="selectCorrect(1)">B</button>
+            <button class="correct-btn" onclick="selectCorrect(2)">C</button>
+            <button class="correct-btn" onclick="selectCorrect(3)">D</button>
+          </div>
+          <div class="time-row">
+            <label>Time (seconds)</label>
+            <input id="f-time" type="number" value="20" min="5" max="60" />
+          </div>
+          <div class="form-actions">
+            <button class="btn-primary" onclick="addQuestion()">Add Question</button>
+            <button class="btn-outline" onclick="loadSampleQuestions()">Load Sample Questions</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export -->
+      <div class="panel">
+        <div class="panel-title">Results Export</div>
+        <div id="export-area">
+          <p style="color:var(--muted);font-size:13px;">Results will appear here after the quiz ends.</p>
+        </div>
+        <button class="btn-outline" style="margin-top:12px;" onclick="exportCSV()">⬇ Export CSV</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Controls -->
+    <div>
+      <div class="panel" style="margin-bottom:16px;">
+        <div class="status-section">
+          <div class="status-title">Live Stats</div>
+          <div class="status-grid">
+            <div class="stat-box"><div class="stat-box-val green" id="stat-joined">0</div><div class="stat-box-lbl">Joined</div></div>
+            <div class="stat-box"><div class="stat-box-val gold" id="stat-answered">0</div><div class="stat-box-lbl">Answered</div></div>
+            <div class="stat-box"><div class="stat-box-val" id="stat-q">0/0</div><div class="stat-box-lbl">Question</div></div>
+            <div class="stat-box"><div class="stat-box-val" id="stat-time">—</div><div class="stat-box-lbl">Time Left</div></div>
+          </div>
+        </div>
+        <div class="status-title" style="margin-top:20px;">Participants</div>
+        <div class="participants-list" id="participants-list">
+          <p style="color:var(--muted);font-size:13px;padding:8px 0;">Waiting for participants to scan and join...</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="status-title">Controls</div>
+        <div class="control-btns">
+          <button class="btn-primary btn-big" onclick="adminStartQuiz()">▶ Start Quiz</button>
+          <button class="btn-outline btn-big" onclick="adminNextQuestion()">→ Next Question</button>
+          <button class="btn-outline btn-big" onclick="adminRevealNow()">👁 Reveal Answer Now</button>
+          <button class="btn-outline btn-big btn-winner" onclick="adminAnnounceWinner()">🏆 Announce Winner</button>
+          <button class="btn-danger btn-big" onclick="adminResetRoom()" style="padding:12px;font-size:14px;border-radius:10px;width:100%;">↺ Reset Room</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let db = null;
+let roomCode = 'ROOM001';
+let isDemo = false;
+let questions = [];
+let selectedCorrect = 0;
+let currentQ = -1;
+let timerInterval = null;
+let participants = {};
+
+// ── FIREBASE CONNECT ──────────────────────────────────────────────────────
+function connectAdmin() {
+  const apiKey = document.getElementById('s-apikey').value.trim();
+  const projectId = document.getElementById('s-project').value.trim();
+  roomCode = document.getElementById('s-room').value.trim() || 'ROOM001';
+  if (!apiKey || !projectId) { alert('Enter API key and project ID'); return; }
+  try {
+    firebase.initializeApp({ apiKey, databaseURL: `https://${projectId}-default-rtdb.firebaseio.com`, projectId });
+    db = firebase.database();
+    initAdmin();
+  } catch(e) { alert('Firebase error: ' + e.message); }
+}
+
+function runDemo() {
+  isDemo = true;
+  roomCode = document.getElementById('s-room').value || 'DEMO01';
+  loadSampleQuestions();
+  initAdmin();
+  // Fake participants
+  setTimeout(() => {
+    ['Arjun Mehta','Priya S.','Karan Singh','Sneha Patel','Dev T.'].forEach((n,i) =>
+      setTimeout(() => addParticipant(n.replace(/\s+/g,'_'), n, n.split(' ')[0].toLowerCase()+'@demo.com'), i * 500)
+    );
+  }, 600);
+}
+
+function initAdmin() {
+  document.getElementById('setup').style.display = 'none';
+  document.getElementById('main').style.display = 'block';
+  document.getElementById('room-label').textContent = roomCode;
+  if (db) {
+    db.ref(`rooms/${roomCode}/participants`).on('child_added', snap => {
+      const p = snap.val();
+      addParticipant(snap.key, p.name, p.email);
+    });
+    db.ref(`rooms/${roomCode}/questions`).on('value', snap => {
+      const data = snap.val();
+      if (data) { questions = Object.values(data); renderQuestions(); }
+    });
+    db.ref(`rooms/${roomCode}/currentQuestion`).on('value', snap => {
+      const q = snap.val();
+      if (q !== null) { currentQ = q; updateStats(); }
+    });
+    db.ref(`rooms/${roomCode}/answers`).on('value', snap => {
+      const data = snap.val() || {};
+      const qAnswers = data[`q${currentQ}`] || {};
+      document.getElementById('stat-answered').textContent = Object.keys(qAnswers).length;
+    });
+    db.ref(`rooms/${roomCode}/winner`).on('value', snap => {
+      if (snap.val()) showExportResults();
+    });
+  }
+}
+
+function addParticipant(uid, name, email) {
+  participants[uid] = { name, email };
+  const list = document.getElementById('participants-list');
+  if (list.querySelector('p')) list.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'p-row';
+  const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  row.innerHTML = `<div class="p-avatar">${initials}</div><div class="p-info"><div class="p-name">${name}</div><div class="p-email">${email}</div></div><div class="p-dot"></div>`;
+  list.appendChild(row);
+  document.getElementById('stat-joined').textContent = Object.keys(participants).length;
+}
+
+// ── QUESTIONS ─────────────────────────────────────────────────────────────
+function selectCorrect(i) {
+  selectedCorrect = i;
+  document.querySelectorAll('.correct-btn').forEach((b,j) => {
+    b.classList.toggle('selected', j === i);
+  });
+}
+selectCorrect(0);
+
+function addQuestion() {
+  const text = document.getElementById('f-text').value.trim();
+  const opts = [
+    document.getElementById('f-a').value.trim(),
+    document.getElementById('f-b').value.trim(),
+    document.getElementById('f-c').value.trim(),
+    document.getElementById('f-d').value.trim(),
+  ];
+  const time = parseInt(document.getElementById('f-time').value) || 20;
+  if (!text || opts.some(o => !o)) { alert('Fill in question and all 4 options'); return; }
+  const q = { text, options: opts, correct: selectedCorrect, time };
+  questions.push(q);
+  if (db) db.ref(`rooms/${roomCode}/questions`).set(questions);
+  renderQuestions();
+  document.getElementById('f-text').value = '';
+  ['f-a','f-b','f-c','f-d'].forEach(id => document.getElementById(id).value = '');
+}
+
+function loadSampleQuestions() {
+  questions = [
+    { text: "Which is the largest ocean on Earth?", options: ["Atlantic","Indian","Pacific","Arctic"], correct: 2, time: 20 },
+    { text: "What does 'HTTP' stand for?", options: ["HyperText Transfer Protocol","HighText Transfer Process","HyperTool Tech Platform","HyperText Tech Protocol"], correct: 0, time: 20 },
+    { text: "How many planets are in our Solar System?", options: ["7","8","9","10"], correct: 1, time: 15 },
+    { text: "What year did World War II end?", options: ["1943","1944","1945","1946"], correct: 2, time: 20 },
+    { text: "Which element has the chemical symbol 'Au'?", options: ["Silver","Copper","Gold","Aluminum"], correct: 2, time: 15 },
+  ];
+  if (db) db.ref(`rooms/${roomCode}/questions`).set(questions);
+  renderQuestions();
+}
+
+function renderQuestions() {
+  const list = document.getElementById('q-list');
+  list.innerHTML = '';
+  questions.forEach((q, i) => {
+    const div = document.createElement('div');
+    div.className = 'q-item';
+    div.innerHTML = `
+      <div class="q-item-num">${i+1}</div>
+      <div class="q-item-body">
+        <div class="q-item-text">${q.text}</div>
+        <div class="q-item-opts">${q.options.map((o,j) => `<span class="q-opt-tag ${j===q.correct?'correct':''}">${['A','B','C','D'][j]}: ${o}</span>`).join('')}</div>
+        <div class="q-item-time">⏱ ${q.time}s</div>
+      </div>
+      <button class="btn-danger" onclick="removeQuestion(${i})">✕</button>`;
+    list.appendChild(div);
+  });
+  document.getElementById('stat-q').textContent = `0/${questions.length}`;
+}
+
+function removeQuestion(i) {
+  questions.splice(i, 1);
+  if (db) db.ref(`rooms/${roomCode}/questions`).set(questions);
+  renderQuestions();
+}
+
+// ── CONTROLS ──────────────────────────────────────────────────────────────
+function updateStats() {
+  document.getElementById('stat-q').textContent = `${currentQ+1}/${questions.length}`;
+}
+
+function adminStartQuiz() {
+  if (questions.length === 0) { alert('Add questions first!'); return; }
+  currentQ = 0;
+  document.getElementById('status-tag').className = 'tag-live';
+  document.getElementById('status-tag').textContent = 'Live';
+  if (db) {
+    db.ref(`rooms/${roomCode}/status`).set('playing');
+    db.ref(`rooms/${roomCode}/currentQuestion`).set(0);
+    startAdminTimer();
+  }
+  updateStats();
+}
+
+function adminNextQuestion() {
+  if (currentQ + 1 >= questions.length) { alert('No more questions! Announce the winner.'); return; }
+  currentQ++;
+  if (db) {
+    db.ref(`rooms/${roomCode}/currentQuestion`).set(currentQ);
+    startAdminTimer();
+  }
+  updateStats();
+}
+
+function adminRevealNow() {
+  clearInterval(timerInterval);
+  document.getElementById('stat-time').textContent = '0';
+  if (db) db.ref(`rooms/${roomCode}/revealAnswer`).set({ q: currentQ, correct: questions[currentQ].correct, ts: Date.now() });
+}
+
+let adminTimeLeft = 0;
+function startAdminTimer() {
+  clearInterval(timerInterval);
+  adminTimeLeft = questions[currentQ].time;
+  document.getElementById('stat-time').textContent = adminTimeLeft;
+  timerInterval = setInterval(() => {
+    adminTimeLeft--;
+    document.getElementById('stat-time').textContent = adminTimeLeft;
+    if (adminTimeLeft <= 0) {
+      clearInterval(timerInterval);
+      if (db) db.ref(`rooms/${roomCode}/revealAnswer`).set({ q: currentQ, correct: questions[currentQ].correct, ts: Date.now() });
+    }
+  }, 1000);
+}
+
+function adminAnnounceWinner() {
+  if (!isDemo && !db) return;
+  if (isDemo) {
+    const winner = Object.values(participants)[0];
+    if (db) db.ref(`rooms/${roomCode}/winner`).set({ name: winner.name, email: winner.email, pts: 2850 });
+    showExportResults();
+  } else if (db) {
+    db.ref(`rooms/${roomCode}/answers`).once('value', snap => {
+      const allScores = {};
+      snap.forEach(qSnap => {
+        const qi = parseInt(qSnap.key.slice(1));
+        qSnap.forEach(aSnap => {
+          const a = aSnap.val();
+          if (!allScores[aSnap.key]) allScores[aSnap.key] = { name: a.name, email: a.email||'', pts: 0 };
+          if (a.choice === questions[qi].correct) {
+            allScores[aSnap.key].pts += Math.max(100, 1000 - Math.floor(a.ms/30));
+          }
+        });
+      });
+      const winner = Object.values(allScores).sort((a,b) => b.pts - a.pts)[0];
+      if (winner) db.ref(`rooms/${roomCode}/winner`).set(winner);
+      showExportResults();
+    });
+  }
+}
+
+function adminResetRoom() {
+  if (!confirm('Reset the room? This clears all answers and participants.')) return;
+  clearInterval(timerInterval);
+  currentQ = -1; participants = {};
+  document.getElementById('participants-list').innerHTML = '<p style="color:var(--muted);font-size:13px;padding:8px 0;">Waiting for participants...</p>';
+  document.getElementById('stat-joined').textContent = '0';
+  document.getElementById('stat-answered').textContent = '0';
+  document.getElementById('stat-time').textContent = '—';
+  document.getElementById('status-tag').className = 'tag-waiting';
+  document.getElementById('status-tag').textContent = 'Lobby';
+  if (db) db.ref(`rooms/${roomCode}`).set({ status: 'lobby', currentQuestion: -1, startedAt: Date.now() });
+}
+
+// ── EXPORT ────────────────────────────────────────────────────────────────
+let exportData = [];
+function showExportResults() {
+  if (!db && !isDemo) return;
+  document.getElementById('status-tag').className = 'tag-waiting';
+  document.getElementById('status-tag').textContent = 'Finished';
+  if (isDemo) {
+    exportData = Object.values(participants).map((p,i) => ({
+      name: p.name, email: p.email,
+      correct: Math.floor(Math.random()*questions.length+1),
+      pts: Math.floor(Math.random()*3000+500),
+      avgMs: (Math.random()*8+1).toFixed(1)
+    })).sort((a,b)=>b.pts-a.pts);
+    renderExportTable();
+    return;
+  }
+  db.ref(`rooms/${roomCode}/answers`).once('value', snap => {
+    const allScores = {};
+    snap.forEach(qSnap => {
+      const qi = parseInt(qSnap.key.slice(1));
+      qSnap.forEach(aSnap => {
+        const a = aSnap.val();
+        if (!allScores[aSnap.key]) allScores[aSnap.key] = { name: a.name, email: a.email||'', pts: 0, correct: 0, totalMs: 0 };
+        if (a.choice === questions[qi].correct) {
+          allScores[aSnap.key].pts += Math.max(100, 1000 - Math.floor(a.ms/30));
+          allScores[aSnap.key].correct++;
+          allScores[aSnap.key].totalMs += a.ms;
+        }
+      });
+    });
+    exportData = Object.values(allScores).sort((a,b)=>b.pts-a.pts).map(s => ({
+      ...s, avgMs: s.correct > 0 ? (s.totalMs/s.correct/1000).toFixed(1) : '—'
+    }));
+    renderExportTable();
+  });
+}
+
+function renderExportTable() {
+  const area = document.getElementById('export-area');
+  if (!exportData.length) { area.innerHTML = '<p style="color:var(--muted);font-size:13px;">No data.</p>'; return; }
+  area.innerHTML = `<table class="export-table"><thead><tr><th>#</th><th>Name</th><th>Email</th><th>Correct</th><th>Avg Speed</th><th>Points</th></tr></thead><tbody>
+    ${exportData.map((r,i) => `<tr><td>${i+1}</td><td>${r.name}</td><td>${r.email}</td><td>${r.correct}/${questions.length}</td><td>${r.avgMs}s</td><td style="color:var(--gold);font-weight:600;">${r.pts.toLocaleString()}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+
+function exportCSV() {
+  if (!exportData.length) { alert('No results to export yet.'); return; }
+  const rows = [['Rank','Name','Email','Correct','Avg Speed (s)','Points']];
+  exportData.forEach((r,i) => rows.push([i+1, r.name, r.email, r.correct, r.avgMs, r.pts]));
+  const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `quiz_results_${roomCode}.csv`;
+  a.click();
+}
+</script>
+</body>
+</html>
