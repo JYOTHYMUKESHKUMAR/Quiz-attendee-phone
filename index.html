@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Join Quiz</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07080f;
+    --surface: #0e1019;
+    --surface2: #161824;
+    --accent: #7c6af7;
+    --gold: #f7c26a;
+    --green: #3de89e;
+    --red: #f76a6a;
+    --text: #f0f0fa;
+    --muted: rgba(240,240,250,0.5);
+    --border: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; min-height: 100dvh; background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); }
+
+  .page { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 100dvh; padding: 24px 20px; text-align: center; }
+  .page.active { display: flex; }
+
+  /* JOIN PAGE */
+  #join-page {
+    background: radial-gradient(ellipse at 50% 30%, rgba(124,106,247,0.2) 0%, transparent 65%), var(--bg);
+  }
+  .join-logo { font-family: 'Syne', sans-serif; font-size: 36px; font-weight: 800; margin-bottom: 8px; }
+  .join-logo span { color: var(--accent); }
+  .join-sub { font-size: 15px; color: var(--muted); margin-bottom: 36px; }
+  .form-group { width: 100%; max-width: 380px; margin-bottom: 14px; text-align: left; }
+  .form-group label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; font-family: 'Syne', sans-serif; letter-spacing: 0.5px; text-transform: uppercase; }
+  .form-group input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; font-size: 16px; color: var(--text); font-family: 'DM Sans', sans-serif; outline: none; -webkit-appearance: none; transition: border-color 0.2s; }
+  .form-group input:focus { border-color: var(--accent); }
+  .join-btn { width: 100%; max-width: 380px; background: var(--accent); color: white; border: none; border-radius: 14px; padding: 16px; font-size: 18px; font-family: 'Syne', sans-serif; font-weight: 700; cursor: pointer; margin-top: 8px; box-shadow: 0 0 30px rgba(124,106,247,0.4); transition: transform 0.15s; -webkit-appearance: none; }
+  .join-btn:active { transform: scale(0.97); }
+  .room-chip { background: var(--surface2); border: 0.5px solid var(--border); border-radius: 30px; padding: 6px 18px; font-size: 13px; color: var(--gold); display: inline-block; margin-bottom: 28px; font-family: 'Syne', sans-serif; }
+
+  /* WAITING */
+  #waiting-page { background: var(--bg); }
+  .pulse-ring { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--accent); animation: pulse 1.8s ease infinite; margin: 0 auto 24px; display: flex; align-items: center; justify-content: center; }
+  @keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.6; } }
+  .pulse-icon { font-size: 30px; }
+  .wait-name { font-family: 'Syne', sans-serif; font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+  .wait-sub { font-size: 15px; color: var(--muted); }
+  .wait-rank { margin-top: 32px; background: var(--surface); border: 0.5px solid var(--border); border-radius: 16px; padding: 18px 28px; display: inline-block; }
+  .wait-rank-val { font-family: 'Syne', sans-serif; font-size: 36px; font-weight: 800; color: var(--gold); }
+  .wait-rank-lbl { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  /* QUESTION PAGE */
+  #question-page { background: radial-gradient(ellipse at 50% 10%, rgba(124,106,247,0.15) 0%, transparent 60%), var(--bg); padding: 20px; justify-content: flex-start; padding-top: 40px; }
+  .q-header { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .q-num-chip { background: var(--surface2); border: 0.5px solid var(--border); border-radius: 8px; padding: 6px 14px; font-size: 13px; color: var(--muted); font-family: 'Syne', sans-serif; }
+  .timer-chip { background: var(--accent); border-radius: 8px; padding: 6px 14px; font-size: 16px; font-family: 'Syne', sans-serif; font-weight: 700; color: white; min-width: 44px; text-align: center; transition: background 0.3s; }
+  .q-question { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; line-height: 1.4; margin-bottom: 32px; width: 100%; text-align: left; }
+  .options-list { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+  .opt-btn { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; font-size: 17px; color: var(--text); text-align: left; display: flex; align-items: center; gap: 14px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.2s; -webkit-appearance: none; }
+  .opt-btn:active { transform: scale(0.98); }
+  .opt-btn.selected { background: rgba(124,106,247,0.15); border-color: var(--accent); }
+  .opt-btn.correct { background: rgba(61,232,158,0.12); border-color: var(--green); }
+  .opt-btn.wrong { background: rgba(247,106,106,0.1); border-color: var(--red); opacity: 0.7; }
+  .opt-btn.disabled { pointer-events: none; }
+  .opt-ltr { width: 32px; height: 32px; border-radius: 8px; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; color: var(--muted); flex-shrink: 0; }
+  .opt-btn.selected .opt-ltr { background: var(--accent); color: white; }
+  .opt-btn.correct .opt-ltr { background: var(--green); color: #07080f; }
+  .result-msg { margin-top: 24px; font-size: 20px; font-family: 'Syne', sans-serif; font-weight: 700; min-height: 32px; }
+  .result-msg.correct { color: var(--green); }
+  .result-msg.wrong { color: var(--red); }
+
+  /* RESULT PAGE */
+  #result-page { background: radial-gradient(ellipse at 50% 40%, rgba(247,194,106,0.15) 0%, transparent 65%), var(--bg); }
+  .result-big { font-size: 64px; margin-bottom: 8px; }
+  .result-title { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; margin-bottom: 4px; }
+  .result-sub { font-size: 15px; color: var(--muted); margin-bottom: 36px; }
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; max-width: 360px; }
+  .stat-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: 14px; padding: 18px; text-align: center; }
+  .stat-val { font-family: 'Syne', sans-serif; font-size: 30px; font-weight: 800; color: var(--gold); }
+  .stat-lbl { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .final-rank { margin-top: 24px; background: var(--surface); border: 2px solid rgba(124,106,247,0.4); border-radius: 18px; padding: 22px 40px; }
+  .final-rank-val { font-family: 'Syne', sans-serif; font-size: 48px; font-weight: 800; color: var(--accent); }
+  .final-rank-lbl { font-size: 14px; color: var(--muted); margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<!-- JOIN -->
+<div id="join-page" class="page active">
+  <div class="join-logo">⚡ <span>QuizLive</span></div>
+  <p class="join-sub">Enter your details to join</p>
+  <div class="room-chip">Room: <span id="room-display">—</span></div>
+  <div class="form-group">
+    <label>Your Name</label>
+    <input id="inp-name" type="text" placeholder="e.g. Arjun Mehta" autocomplete="name" />
+  </div>
+  <div class="form-group">
+    <label>Email Address</label>
+    <input id="inp-email" type="email" placeholder="you@example.com" autocomplete="email" />
+  </div>
+  <button class="join-btn" onclick="joinQuiz()">Join Quiz →</button>
+</div>
+
+<!-- WAITING -->
+<div id="waiting-page" class="page">
+  <div class="pulse-ring"><div class="pulse-icon">🎯</div></div>
+  <div class="wait-name" id="wait-name">Hey!</div>
+  <div class="wait-sub">You're in! Waiting for the host to start...</div>
+  <div class="wait-rank">
+    <div class="wait-rank-val" id="joined-count">1</div>
+    <div class="wait-rank-lbl">participants joined</div>
+  </div>
+</div>
+
+<!-- QUESTION -->
+<div id="question-page" class="page">
+  <div class="q-header">
+    <div class="q-num-chip" id="qp-num">Q1 / 5</div>
+    <div class="timer-chip" id="qp-timer">20</div>
+  </div>
+  <div class="q-question" id="qp-text">Loading question...</div>
+  <div class="options-list" id="qp-options"></div>
+  <div class="result-msg" id="result-msg"></div>
+</div>
+
+<!-- FINAL RESULT -->
+<div id="result-page" class="page">
+  <div class="result-big" id="result-emoji">🏆</div>
+  <div class="result-title" id="result-title">Quiz Complete!</div>
+  <div class="result-sub" id="result-sub">Thanks for playing</div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-val" id="rs-correct">0</div><div class="stat-lbl">Correct</div></div>
+    <div class="stat-card"><div class="stat-val" id="rs-pts">0</div><div class="stat-lbl">Points</div></div>
+    <div class="stat-card"><div class="stat-val" id="rs-avg">—</div><div class="stat-lbl">Avg Speed</div></div>
+    <div class="stat-card"><div class="stat-val" id="rs-total">5</div><div class="stat-lbl">Questions</div></div>
+  </div>
+  <div class="final-rank">
+    <div class="final-rank-val" id="rs-rank">#—</div>
+    <div class="final-rank-lbl">Your Final Rank</div>
+  </div>
+</div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────
+// Get room from URL param
+const urlParams = new URLSearchParams(window.location.search);
+const roomCode = urlParams.get('room') || 'ROOM001';
+document.getElementById('room-display').textContent = roomCode;
+
+// Firebase config — replace with your config
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCUE5wZfbJ4S0dVWdQunELMcldBUwBR544",
+  databaseURL: "https://quiz-90492-default-rtdb.firebaseio.com",
+  projectId: "quiz-90492"
+};
+
+// ─── APP STATE ─────────────────────────────────────────────────────────────
+let db = null;
+let myName = '';
+let myEmail = '';
+let myUID = '';
+let myPts = 0;
+let myCorrect = 0;
+let myTotalMs = 0;
+let currentQ = -1;
+let questionStartTime = 0;
+let answered = false;
+let timerInterval = null;
+let timeLeft = 20;
+let totalQuestions = 5;
+
+// ─── FIREBASE INIT ────────────────────────────────────────────────────────
+try {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.database();
+} catch(e) {
+  console.warn('Firebase not configured — using demo mode');
+}
+
+// ─── JOIN ─────────────────────────────────────────────────────────────────
+function joinQuiz() {
+  const name = document.getElementById('inp-name').value.trim();
+  const email = document.getElementById('inp-email').value.trim();
+  if (!name || !email) { alert('Please enter your name and email'); return; }
+  if (!email.includes('@')) { alert('Please enter a valid email'); return; }
+  myName = name;
+  myEmail = email;
+  myUID = name.replace(/\s+/g,'_') + '_' + Date.now();
+  document.getElementById('wait-name').textContent = `Hey ${name.split(' ')[0]}! 👋`;
+  showPage('waiting-page');
+  if (db) {
+    db.ref(`rooms/${roomCode}/participants/${myUID}`).set({ name, email, joinedAt: Date.now() });
+    db.ref(`rooms/${roomCode}/participants`).on('value', snap => {
+      const count = snap.numChildren();
+      document.getElementById('joined-count').textContent = count;
+    });
+    listenForQuiz();
+  } else {
+    // Demo: auto start after 3 seconds
+    setTimeout(() => loadQuestion(0, 20), 3000);
+  }
+}
+
+// ─── LISTEN FOR QUIZ STATE ────────────────────────────────────────────────
+function listenForQuiz() {
+  if (!db) return;
+  db.ref(`rooms/${roomCode}/currentQuestion`).on('value', snap => {
+    const qIdx = snap.val();
+    if (qIdx !== null && qIdx >= 0 && qIdx !== currentQ) {
+      db.ref(`rooms/${roomCode}/questions/${qIdx}`).once('value', qSnap => {
+        const q = qSnap.val();
+        if (q) loadQuestion(qIdx, q.time || 20, q.text, q.options);
+      });
+    }
+  });
+  db.ref(`rooms/${roomCode}/winner`).on('value', snap => {
+    if (snap.val()) showFinalResult();
+  });
+  db.ref(`rooms/${roomCode}/revealAnswer`).on('value', snap => {
+    const data = snap.val();
+    if (data && data.q === currentQ) revealAnswer(data.correct);
+  });
+}
+
+// ─── QUESTION ─────────────────────────────────────────────────────────────
+const DEMO_QUESTIONS = [
+  { text: "Which is the largest ocean on Earth?", options: ["Atlantic","Indian","Pacific","Arctic"], correct: 2, time: 20 },
+  { text: "What does 'HTTP' stand for?", options: ["HyperText Transfer Protocol","HighText Transfer Process","HyperTool Tech Platform","HyperText Tech Protocol"], correct: 0, time: 20 },
+  { text: "How many planets are in our Solar System?", options: ["7","8","9","10"], correct: 1, time: 15 },
+  { text: "What year did World War II end?", options: ["1943","1944","1945","1946"], correct: 2, time: 20 },
+  { text: "Which element has the chemical symbol 'Au'?", options: ["Silver","Copper","Gold","Aluminum"], correct: 2, time: 15 },
+];
+
+function loadQuestion(qIdx, time, text, options) {
+  currentQ = qIdx;
+  answered = false;
+  questionStartTime = Date.now();
+  timeLeft = time || 20;
+  document.getElementById('result-msg').textContent = '';
+  document.getElementById('result-msg').className = 'result-msg';
+
+  const q = db ? { text, options, time } : DEMO_QUESTIONS[qIdx];
+  document.getElementById('qp-num').textContent = `Q${qIdx+1} / ${totalQuestions}`;
+  document.getElementById('qp-text').textContent = q.text;
+  const optList = document.getElementById('qp-options');
+  optList.innerHTML = '';
+  q.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'opt-btn';
+    btn.id = `opt-${i}`;
+    btn.innerHTML = `<div class="opt-ltr">${['A','B','C','D'][i]}</div><span>${opt}</span>`;
+    btn.onclick = () => submitAnswer(i, q.correct);
+    optList.appendChild(btn);
+  });
+  showPage('question-page');
+  startTimer(time || 20, qIdx);
+}
+
+function startTimer(secs, qIdx) {
+  clearInterval(timerInterval);
+  timeLeft = secs;
+  updateTimer();
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    updateTimer();
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      if (!answered) timeUp();
+    }
+  }, 1000);
+}
+
+function updateTimer() {
+  const el = document.getElementById('qp-timer');
+  el.textContent = timeLeft;
+  el.style.background = timeLeft > 10 ? 'var(--accent)' : timeLeft > 5 ? '#e08c2a' : '#c0392b';
+}
+
+function submitAnswer(choice, correctOpt) {
+  if (answered) return;
+  answered = true;
+  clearInterval(timerInterval);
+  const ms = Date.now() - questionStartTime;
+  // Highlight selection
+  document.querySelectorAll('.opt-btn').forEach(b => b.classList.add('disabled'));
+  document.getElementById(`opt-${choice}`).classList.add('selected');
+  // Send to Firebase
+  if (db) {
+    db.ref(`rooms/${roomCode}/answers/q${currentQ}/${myUID}`).set({
+      name: myName, email: myEmail, choice, ms, ts: Date.now()
+    });
+    // Wait for host reveal
+  } else {
+    // Demo: reveal immediately after 1.5s
+    setTimeout(() => revealAnswer(DEMO_QUESTIONS[currentQ].correct), 1500);
+  }
+  // Optimistic score preview
+  const msg = document.getElementById('result-msg');
+  msg.textContent = '✓ Answer submitted!';
+  msg.style.color = 'var(--muted)';
+}
+
+function timeUp() {
+  answered = true;
+  const msg = document.getElementById('result-msg');
+  msg.textContent = "⏱ Time's up!";
+  msg.style.color = 'var(--red)';
+  document.querySelectorAll('.opt-btn').forEach(b => b.classList.add('disabled'));
+  if (!db) setTimeout(() => revealAnswer(DEMO_QUESTIONS[currentQ].correct), 1000);
+}
+
+function revealAnswer(correct) {
+  document.querySelectorAll('.opt-btn').forEach((b, i) => {
+    b.classList.add('disabled');
+    if (i === correct) b.classList.add('correct');
+  });
+  // Check if I was right
+  const myBtn = document.querySelector('.opt-btn.selected');
+  const myChoice = myBtn ? [...document.querySelectorAll('.opt-btn')].indexOf(myBtn) : -1;
+  const msg = document.getElementById('result-msg');
+  if (myChoice === correct) {
+    myBtn.classList.remove('selected');
+    const ms = Date.now() - questionStartTime;
+    const pts = Math.max(100, 1000 - Math.floor(ms / 30));
+    myPts += pts;
+    myCorrect++;
+    myTotalMs += ms;
+    msg.textContent = `✅ Correct! +${pts} pts`;
+    msg.className = 'result-msg correct';
+  } else if (myChoice >= 0) {
+    myBtn.classList.remove('selected');
+    myBtn.classList.add('wrong');
+    msg.textContent = `❌ Wrong answer`;
+    msg.className = 'result-msg wrong';
+  }
+  // Demo: go to next question
+  if (!db) {
+    const nextQ = currentQ + 1;
+    if (nextQ < DEMO_QUESTIONS.length) {
+      setTimeout(() => loadQuestion(nextQ, DEMO_QUESTIONS[nextQ].time), 3000);
+    } else {
+      setTimeout(() => showFinalResult(), 3000);
+    }
+  }
+}
+
+function showFinalResult() {
+  showPage('result-page');
+  document.getElementById('rs-correct').textContent = myCorrect;
+  document.getElementById('rs-pts').textContent = myPts.toLocaleString();
+  document.getElementById('rs-avg').textContent = myCorrect > 0 ? (myTotalMs/myCorrect/1000).toFixed(1)+'s' : '—';
+  document.getElementById('rs-total').textContent = DEMO_QUESTIONS.length;
+  // Rank from Firebase (simplified)
+  if (db) {
+    db.ref(`rooms/${roomCode}/answers`).once('value', snap => {
+      const allScores = {};
+      snap.forEach(qSnap => {
+        const correct = DEMO_QUESTIONS[parseInt(qSnap.key.slice(1))].correct;
+        qSnap.forEach(aSnap => {
+          const a = aSnap.val();
+          if (!allScores[aSnap.key]) allScores[aSnap.key] = 0;
+          if (a.choice === correct) allScores[aSnap.key] += Math.max(100, 1000 - Math.floor(a.ms/30));
+        });
+      });
+      const sorted = Object.entries(allScores).sort(([,a],[,b])=>b-a);
+      const rank = sorted.findIndex(([uid])=>uid===myUID) + 1;
+      document.getElementById('rs-rank').textContent = '#' + (rank || '?');
+    });
+  } else {
+    document.getElementById('rs-rank').textContent = myPts > 1500 ? '#1' : myPts > 800 ? '#2' : '#3';
+  }
+  const emoji = myCorrect === DEMO_QUESTIONS.length ? '🏆' : myCorrect >= 3 ? '🎉' : myCorrect >= 2 ? '👏' : '💪';
+  document.getElementById('result-emoji').textContent = emoji;
+  document.getElementById('result-title').textContent = myCorrect >= 4 ? 'Amazing!' : myCorrect >= 2 ? 'Well done!' : 'Good try!';
+  document.getElementById('result-sub').textContent = `You scored ${myPts.toLocaleString()} points`;
+}
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+</script>
+</body>
+</html>
